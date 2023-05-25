@@ -70,7 +70,7 @@ CREATE TABLE `db_entity` (
 #### 1.添加插件maven依赖
 ```java
 <dependency>
-    <groupId>com.hanzq.springboot</groupId>
+    <groupId>com.github.MMstarry</groupId>
     <artifactId>spring-boot-multi-source</artifactId>
     <version>1.0.0-RELEASE</version>
 </dependency>
