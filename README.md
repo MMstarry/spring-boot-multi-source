@@ -12,7 +12,7 @@
 | ClickHouse           | ClickHouse  | com.clickhouse.jdbc.ClickHouseDriver         | jdbc:clickhouse://ip:port/db             | jdbc:clickhouse://localhost:8123/system           | SELECT 1               | 已适配 |                                                   |
 | DB2                  | Db2         | com.ibm.db2.jcc.DB2Driver                    | jdbc:db2://ip:port/db                    | jdbc:db2://localhost:50001/SAMPLE                 | values 1               | 已适配 |                                                   |
 | TiDB                 | TiDB        | com.mysql.cj.jdbc.Driver                     | jdbc:mysql://ip:port/db                  | jdbc:mysql://localhost:4000/mydb                  | SELECT 1               | 已适配 |                                                   |
-| JDBC                 | JDBC        | xxxx                                         | xxxx                                     | xxxx                                              | xxxx                   | 已适配 | 创建连接前先上传 jar,详情见注意事项               |
+| JDBC                 | JDBC        | xxxx                                         | xxxx                                     | xxxx                                              | xxxx                   | 已适配 | 创建JDBC数据源前先上传 jar到指定目录,详情见注意事项               |
 | Apache Doris         | Doris       | com.mysql.cj.jdbc.Driver                     | jdbc:mysql://ip:port/db                  | jdbc:mysql://localhost:9031/information_schema    | SELECT 1               | 已适配 |                                                   |
 | Apache Hive          | Apache Hive | org.apache.hive.jdbc.HiveDriver              | jdbc:hive2://ip:port/db                  | jdbc:hive2://localhost:10000/default              | SELECT 1               | 已适配 |                                                   |
 | MongoDB              | MongoDB     | mongodb.jdbc.MongoDriver                     | jdbc:mongo://ip:port/db                  | jdbc:mongo://localhost:27017/runoob               | SELECT 1               | 已适配 | 使用驱动包 mongodb_unityjdbc_full.jar，见注意事项 |
@@ -70,7 +70,7 @@ CREATE TABLE `db_entity` (
 #### 1.添加插件maven依赖
 ```java
 <dependency>
-    <groupId>com.github.MMstarry</groupId>
+    <groupId>io.github.mmstarry</groupId>
     <artifactId>spring-boot-multi-source</artifactId>
     <version>1.0.0-RELEASE</version>
 </dependency>
@@ -128,6 +128,9 @@ spring.datasource.hikari.registerMbeans=false
 #此属性控制是否可以通过JMX（Java Management Extensions，即Java管理扩展，它提供了一种在运行时动态管理资源的体系结构）挂起和恢复池
 spring.datasource.hikari.allowPoolSuspension=false
 
+logging.config=classpath:logback-boot.xml
+logging.level.root=info
+
 #是否开启加载外部第三方jar包
 loadJar.open=true
 #外部第三方jar包 所在目录
@@ -164,9 +167,16 @@ PS: DynamicDbSource.set(“连接池名称”),可以根据自己的实际业务
 ```
 1.启动类加注解 @EnableTransactionManagement(order = 0)
 2. @Transactional与@TargetDataSource 一起出现
+
+@TargetDataSource
+@Transactional(rollbackFor = Exception.class)
+public void update(){
+   db2Dao.update();
+}
+
 ```
 #### 6.工具类
-##### 获取连接池中的数据源
+##### 获取连接池中的数据源pool_name集合
 ```
 List<String> dataSourcesList=DataSourceUtils.getDataSources();
 ```
