@@ -82,7 +82,7 @@ CREATE TABLE `db_entity` (
 ```
 
 #### 3.必要的连接属性配置
-```aidl
+```properties
 server.port=8091
 #插件 从数据库读取多数据源配置开关
 spring.datasource.db.open=true
