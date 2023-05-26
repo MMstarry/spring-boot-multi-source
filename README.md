@@ -267,3 +267,26 @@ loadJar:
   #外部第三方jar包 所在目录
   basePath: D:\jar
 ```
+
+
+### MyBatis框架中的用法
+MyBatis是一款非常优秀的持久层框架，尤其是在互联网企业中使用的人群超级多。
+
+演示项目 [easy-mybatis]()
+待提交
+
+
+### JPA中的用法
+JPA是SpringBoot默认集成的持久层框架，如果使用过Hibernate，那么对JPA则很快上手。使用JPA开发CRUD，可以说是非常的迅速、顺手。
+在管理项目中做功能开发没有比JPA开发效率更高的了，如果你觉得使用起来不是很方便，那一定是没有找到正确的用法。这个项目中只是为了演示spring-boot-multi-source项目
+如何支持JPA的开发，并没有对JPA技术进行详细介绍。
+
+演示项目 [easy-jpa]()
+待提交
+
+### JdbcTemplate中的用法
+JdbcTemplate很早之前就在SpringJdbc中出现了。由于它只对原生数据连接操作使用模板模式进行简单包装（如果没有任何封装，那么使用起来是非常蹩脚的），所以更接近原生操作；这也注定了它比其他几个框架更加灵活且学习成本更低。我们则更容易根据自己的业务场景、使用习惯封装出独特的持久层方案。
+
+演示项目 [easy-jdbctemplate](https://github.com/MMstarry/spring-boot-multi-source/tree/main/easy-jdbctemplate)
+
+祝好！
