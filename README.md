@@ -138,10 +138,11 @@ loadJar.basePath=D:\jar
 ```
 #### 4.使用方式
 由于数据源动态切换是使用Aspect+注解完成的，所以调用时需要将Bean交给Spring的IOC容器管理。只有这样Spring才能通过AOP加强，触发我们的切换逻辑。
-```aidl
+```java
 
 //方式1 指定连接池(Service层或者Dao层)
-@TargetDataSource(groupName = "db")或者 @TargetDataSource("db")
+@TargetDataSource("db")
+//@TargetDataSource(groupName = "db")
 public List<String> findById(int id) {
         return dbDao.findById();
 }
@@ -154,7 +155,7 @@ public void update()  {
     db2Service.update();
 }
 
-对应的Service层 方法上加注解@TargetDataSource
+//对应的Service层 方法上加注解@TargetDataSource
 @TargetDataSource
 public void update(){
    db2Dao.update();
