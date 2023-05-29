@@ -40,6 +40,7 @@
 	1. 项目动态支持多数据源连接池配置
 	2. 理论上支持无限多个数据源连接池
 	3. 通过注解切换数据源
+	4. 项目启动后 动态增加移除数据源
 
 #### 数据库脚本
 ```jql
@@ -200,9 +201,13 @@ datasourceentity.put("type", "MySQL");
 #加载外部数据源
 # true:加载成功  false:加载失败
 boolean flag=DataSourceUtils.AddDataSource(datasourceentity);
+
+
+#移除数据源
+DataSourceUtils.removeDbDataSource("连接池名称");
 ```
 
-##### 校验连接的有效性 等待返回值，请勿重复提交
+##### 校验连接的有效性
 ```
 # status 0:有效  -1:无效
 Map validResultMap=DataSourceUtils.validConnection(datasourceentity);
