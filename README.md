@@ -17,7 +17,7 @@
 | **已适配** | Apache Hive          | Apache Hive | org.apache.hive.jdbc.HiveDriver              | jdbc:hive2://ip:port/db                  | jdbc:hive2://localhost:10000/default              | SELECT 1               |                                        |
 | **已适配** | MongoDB              | MongoDB     | mongodb.jdbc.MongoDriver                     | jdbc:mongo://ip:port/db                  | jdbc:mongo://localhost:27017/runoob               | SELECT 1               | 使用驱动包 mongodb_unityjdbc_full.jar，见注意事项 |
 
-### V1.0.0- 更新说明
+### V1.0.1- 更新说明
 ```javascript
  优化部分bug
 ```
