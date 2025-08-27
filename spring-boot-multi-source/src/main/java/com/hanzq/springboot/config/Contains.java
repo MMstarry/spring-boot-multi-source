@@ -25,6 +25,10 @@ public class Contains {
         return String.format("%s.%s", DB_SETTING_PREFIX, DB_OPEN);
     }
 
+    public static String getDbSync() {
+        return String.format("%s.%s", DB_SETTING_PREFIX, DB_SYNC);
+    }
+
     /**
      * 设置数据库资源配置表名称, 默认为db
      *
@@ -163,6 +167,8 @@ public class Contains {
      * 是否开启数据源配置
      */
     private static String DB_OPEN = ".db.open";
+
+    private static String DB_SYNC = ".db.sync";
 
     /**
      * 数据源名称

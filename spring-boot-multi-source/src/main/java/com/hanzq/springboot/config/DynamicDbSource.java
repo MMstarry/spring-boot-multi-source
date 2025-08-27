@@ -21,7 +21,7 @@ public class DynamicDbSource {
      * @param targetDataSourceId
      */
     public static void set(String targetDataSourceId) {
-        logger.info("设置线程Id = " + Thread.currentThread().getId() + " ;目标数据源分组连接池名 = " + targetDataSourceId);
+       
         dataSource.set(new GroupDataSource(targetDataSourceId));
     }
 
@@ -54,10 +54,10 @@ public class DynamicDbSource {
     public static void setGroupNamePoolNameBalanceType(String targetDataSourceGroupName, String targetDataSourceId
             , LoadBalanceType targetBalanceType) {
         targetDataSourceId = StringUtils.isEmpty(targetDataSourceId) ? "" : targetDataSourceId;
-        logger.info("设置线程Id = " + Thread.currentThread().getId()
-                + " ;目标数据源分组名 = " + targetDataSourceGroupName
-                + " ;目标数据源分组连接池名 = " + targetDataSourceId
-                + " ;目标数据源均衡类型 = " + targetBalanceType);
+
+
+
+
         dataSource.set(new GroupDataSource(targetDataSourceGroupName, targetDataSourceId, targetBalanceType));
     }
 
@@ -71,7 +71,7 @@ public class DynamicDbSource {
     }
 
     public static void remove() {
-        logger.info("删除线程Id = " + Thread.currentThread().getId() + " ;目标数据源分组连接池名 = " + dataSource.get().getGroupId()+"\n");
+       
         dataSource.remove();
     }
 }

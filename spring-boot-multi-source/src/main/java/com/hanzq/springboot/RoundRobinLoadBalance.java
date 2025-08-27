@@ -19,7 +19,7 @@ public class RoundRobinLoadBalance implements LoadBalance {
 
     public List<String> dataSourceIds;
 
-    public static final Map<String, AtomicInteger> SEQUENCE = new ConcurrentHashMap();
+    public static final Map<String, AtomicInteger> SEQUENCE = new ConcurrentHashMap<>();
 
     private String groupName;
 

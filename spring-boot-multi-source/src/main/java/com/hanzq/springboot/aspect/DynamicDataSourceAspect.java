@@ -1,5 +1,6 @@
 package com.hanzq.springboot.aspect;
 
+import com.hanzq.springboot.DataSourceUtils;
 import com.hanzq.springboot.LoadBalanceType;
 import com.hanzq.springboot.annotation.TargetDataSource;
 import com.hanzq.springboot.config.DynamicDataSourceContextHolder;
@@ -11,7 +12,6 @@ import org.aspectj.lang.annotation.Before;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -23,11 +23,13 @@ import org.springframework.util.StringUtils;
  * Created by 韩志强(18297397903@163.com) on 2023/5/7
  */
 @Aspect
-//@Order(-1)
+
 @Component
 public class DynamicDataSourceAspect implements Ordered {
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
+
+
 
     /**
      * @Before：在方法执行之前进行执行;
@@ -38,23 +40,23 @@ public class DynamicDataSourceAspect implements Ordered {
     @Before("@annotation(targetDataSource)")
     public void changeDataSource(JoinPoint point, TargetDataSource targetDataSource) {
 
-        //连接池名
+        
         String dsName = null;
-        //连接池分组名
+        
         String groupName = null;
-        //负载均衡类型
+        
         LoadBalanceType balanceType = null;
 
-        //使用了 TargetDataSource注解
+        
         if (null != targetDataSource) {
             dsName = targetDataSource.value();
 
-            //注解未分组配置
+            
             if (StringUtils.isEmpty(dsName)) {
                 dsName = targetDataSource.poolName();
             }
 
-            //注解未分组配置
+            
             if (StringUtils.isEmpty(dsName)) {
                 dsName = targetDataSource.poolName();
                 groupName = targetDataSource.groupName();
@@ -62,12 +64,12 @@ public class DynamicDataSourceAspect implements Ordered {
             }
         }
 
-        // 未分组配置
+        
         if (StringUtils.isEmpty(dsName) && StringUtils.isEmpty(groupName)) {
-            //TargetDataSource注解上未指定具体的数据源，获取方法内通过DynamicDbSource.set("连接池名")指定的数据源
+            
             dsName = DynamicDbSource.get();
 
-            //连接池分组配置
+            
             if (StringUtils.isEmpty(dsName) && null != DynamicDbSource.getGroupDataSource()) {
                 dsName = DynamicDbSource.getGroupDataSource().getGroupId();
                 groupName = DynamicDbSource.getGroupDataSource().getGroupName();
@@ -75,7 +77,7 @@ public class DynamicDataSourceAspect implements Ordered {
             }
         }
 
-        //验证数据源是否存在
+        
         if (DynamicDataSourceContextHolder.containsDataSource(dsName)) {
 
             logger.debug("使用数据源名称 = [{}] , signature = [{}]", dsName, point.getSignature());
@@ -85,7 +87,15 @@ public class DynamicDataSourceAspect implements Ordered {
             logger.debug("使用数据源名称 = [{}] , signature = [{}]", dsName, point.getSignature());
             DynamicDataSourceContextHolder.setDataSourceGroup(groupName, dsName, balanceType);
         } else {
+            logger.debug("数据源 [{}] 重新连接", dsName);
+            try {
+                
+                DataSourceUtils.runLoadDataSource(dsName);
+                DynamicDataSourceContextHolder.setDataSourceName(dsName);
 
+            }catch (Exception ignored){
+
+            }
             logger.error("数据源 [{}] 不存在, 使用默认数据源 [{}]", dsName, point.getSignature());
         }
     }
@@ -99,23 +109,23 @@ public class DynamicDataSourceAspect implements Ordered {
     @After("@annotation(targetDataSource)")
     public void restoreDataSource(JoinPoint point, TargetDataSource targetDataSource) {
 
-        //连接池名
+        
         String dsName = null;
-        //使用了 TargetDataSource注解
+        
         if (null != targetDataSource) {
             dsName = targetDataSource.value();
 
-            //注解未分组配置
+            
             if (StringUtils.isEmpty(dsName)) {
                 dsName = targetDataSource.poolName();
             }
         }
 
-        // 连接池未分组配置
+        
         if (StringUtils.isEmpty(dsName)) {
             dsName = DynamicDbSource.get();
 
-            //连接池分组配置
+            
             if (StringUtils.isEmpty(dsName) && null != DynamicDbSource.getGroupDataSource()) {
                 dsName = DynamicDbSource.getGroupDataSource().getGroupId();
             }
@@ -123,9 +133,9 @@ public class DynamicDataSourceAspect implements Ordered {
 
         if (!StringUtils.isEmpty(dsName)) {
             logger.debug("还原数据源 = [{}] ,  signature = [{}]", dsName, point.getSignature());
-            //销毁当前数据源信息，进行垃圾回收
+            
             DynamicDataSourceContextHolder.clearDataSource();
-            //删除线程Id
+            
             DynamicDbSource.remove();
         }
     }

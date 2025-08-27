@@ -20,7 +20,7 @@ public class LoadBalanceFactory {
                                 , randomLoadBalance.getClass().getInterfaces(), new LoadBalanceHandler(randomLoadBalance));
                 return loadBalance.select();
 
-            default: //默认轮询
+            default: 
                 RoundRobinLoadBalance roundRobinLoadBalance = new RoundRobinLoadBalance(dataSourceIds, groupName);
                 loadBalance = (LoadBalance<String>) Proxy.newProxyInstance(roundRobinLoadBalance.getClass().getClassLoader()
                         , roundRobinLoadBalance.getClass().getInterfaces(), new LoadBalanceHandler(roundRobinLoadBalance));

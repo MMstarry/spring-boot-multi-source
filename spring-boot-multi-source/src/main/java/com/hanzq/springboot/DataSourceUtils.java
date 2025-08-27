@@ -9,16 +9,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.MutablePropertyValues;
 import org.springframework.beans.factory.support.GenericBeanDefinition;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.management.JMX;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import java.lang.management.ManagementFactory;
 import java.sql.DriverManager;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -28,16 +26,16 @@ public class DataSourceUtils {
 
     private static final Logger logger = LoggerFactory.getLogger(DataSourceUtils.class);
 
-    private static  AnnotationConfigApplicationContext annotationConfigApplicationContext = new AnnotationConfigApplicationContext(DynamicDataSourceRegister.class);
+    private static final AnnotationConfigApplicationContext annotationConfigApplicationContext = new AnnotationConfigApplicationContext(DynamicDataSourceRegister.class);
 
-    private static  DynamicDataSourceRegister dynamicDataSourceRegister = annotationConfigApplicationContext.getBean(DynamicDataSourceRegister.class);
-    
+    private static final DynamicDataSourceRegister dynamicDataSourceRegister = annotationConfigApplicationContext.getBean(DynamicDataSourceRegister.class);
+
     /**
      * 校验连接的有效性
      * @param dbEntity 数据源配置信息
      * @return
      */
-    public static Map validConnection(Map<String, Object> dbEntity) {
+    public static Map<String,Object> validConnection(Map<String, Object> dbEntity) {
         Map<String,Object> reMap=new ConcurrentHashMap<>();
         reMap.put("status",0);
         reMap.put("message","检验成功");
@@ -100,13 +98,13 @@ public class DataSourceUtils {
 
     /**
      * 运行时卸载数据源
-     * @param pool_name
+     * @param poolName
      */
-    public static void removeDbDataSource(String pool_name){
-        dynamicDataSourceRegister.removeDbDataSource(pool_name);
-        DynamicDataSourceContextHolder.dataSourceIds.remove(pool_name);
+    public static void removeDbDataSource(String poolName){
+        dynamicDataSourceRegister.removeDbDataSource(poolName);
+        DynamicDataSourceContextHolder.dataSourceIds.remove(poolName);
 
-        DynamicDataSourceContextHolder.dataSourceGroupIds.remove(pool_name);
+        DynamicDataSourceContextHolder.dataSourceGroupIds.remove(poolName);
         dynamicDataSourceRegister.getDefinitionRegistry().removeBeanDefinition("dataSource");
 
         GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
@@ -114,7 +112,7 @@ public class DataSourceUtils {
         beanDefinition.setSynthetic(true);
         MutablePropertyValues mpv = beanDefinition.getPropertyValues();
         mpv.addPropertyValue("defaultTargetDataSource", dynamicDataSourceRegister.getDefaultDataSource());
-        Map<Object, Object> targetDataSources = new HashMap();
+        Map<Object, Object> targetDataSources = new HashMap<>();
         targetDataSources.put("dataSource", dynamicDataSourceRegister.getDefaultDataSource());
         targetDataSources.putAll(dynamicDataSourceRegister.getCustomDataSources());
         mpv.addPropertyValue("targetDataSources", targetDataSources);
@@ -122,6 +120,20 @@ public class DataSourceUtils {
         dynamicDataSourceRegister.getDefinitionRegistry().registerBeanDefinition("dataSource", beanDefinition);
         logger.info("重新加载外部数据源!");
     }
+
+
+    public static void runLoadDataSource(String poolName){
+        String dbName = dynamicDataSourceRegister.getDbTableName();
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dynamicDataSourceRegister.getDefaultDataSource());
+        List<Map<String, Object>> entityList = dynamicDataSourceRegister.queryDbEntityList(jdbcTemplate, dbName);
+        if(!entityList.isEmpty()){
+            Optional<Map<String, Object>> optionMap = entityList.stream().filter(permissionMap -> permissionMap.get("pool_name").toString().equals(poolName)).findFirst();
+
+            optionMap.ifPresent(DataSourceUtils::AddDataSource);
+        }
+    }
+
+
 
     /**
      * 加载外部数据源
@@ -150,7 +162,7 @@ public class DataSourceUtils {
         beanDefinition.setSynthetic(true);
         MutablePropertyValues mpv = beanDefinition.getPropertyValues();
         mpv.addPropertyValue("defaultTargetDataSource", dynamicDataSourceRegister.getDefaultDataSource());
-        Map<Object, Object> targetDataSources = new HashMap();
+        Map<Object, Object> targetDataSources = new HashMap<>();
         targetDataSources.put("dataSource", dynamicDataSourceRegister.getDefaultDataSource());
         targetDataSources.putAll(dynamicDataSourceRegister.getCustomDataSources());
         mpv.addPropertyValue("targetDataSources", targetDataSources);
@@ -159,4 +171,6 @@ public class DataSourceUtils {
         logger.info("动态加载外部数据源!");
         return true;
     }
+
+
 }

@@ -17,7 +17,7 @@ public class RandomLoadBalance implements LoadBalance {
 
     public List<String> dataSourceIds;
 
-    private final ThreadLocal<Random> randomThreadLocal = new ThreadLocal();
+    private final ThreadLocal<Random> randomThreadLocal = new ThreadLocal<>();
 
     public RandomLoadBalance(List<String> dataSourceIds) {
         this.dataSourceIds = dataSourceIds;

@@ -2,7 +2,6 @@ package com.hanzq.springboot.config;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import javafx.application.Application;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.MutablePropertyValues;
@@ -13,6 +12,7 @@ import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotationMetadata;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.lang.NonNull;
 import org.springframework.util.StringUtils;
 
 import javax.sql.DataSource;
@@ -29,6 +29,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 
@@ -43,14 +46,21 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
     // 默认数据源（主数据源）
     private static DataSource defaultDataSource;
 
+    private static String dbTableName;
+
+    private static long mongoDBMaxLifetime=1800000;
+
+    private static String defaultIp="";
+
+    private static String defaultHostNameMatch="";
 
     public static BeanDefinitionRegistry definitionRegistry;
 
     //代理数据源
-    private static Map<String, DataSource> customDataSources = new ConcurrentHashMap();
+    public static Map<String, DataSource> customDataSources = new ConcurrentHashMap<>();
 
     //代理数据源 分组
-    private static Map<String, List<String>> customDataSourcesGroup = new ConcurrentHashMap();
+    private static Map<String, List<String>> customDataSourcesGroup = new ConcurrentHashMap<>();
 
     public  DataSource getDefaultDataSource(){
         return defaultDataSource;
@@ -60,6 +70,10 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
 
     public  Map<String, DataSource> getCustomDataSources(){
         return customDataSources;
+    }
+
+    public String getDbTableName(){
+        return dbTableName;
     }
 
     public  Map<String, List<String>> getCustomDataSourcesGroup(){
@@ -80,7 +94,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
      * @param env
      */
     @Override
-    public void setEnvironment(Environment env) {
+    public void setEnvironment(@NonNull Environment env) {
         loadJar(env);
         initSupportDataBases();
         initDefaultDataSource(env);
@@ -94,11 +108,16 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
      * @param env
      */
     public void loadJar(Environment env)  {
-        if (env.getProperty("loadJar.open", Boolean.class) == null ? false : true) {
+        if (Boolean.parseBoolean(env.getProperty("loadJar.open", "false"))) {
             try {
                 String property = env.getProperty("loadJar.basePath");
-                File libDir = new File(property);
-                URLClassLoader classLoader = (URLClassLoader) Application.class.getClassLoader();
+                File libDir = null;
+                if (property != null) {
+                    libDir = new File(property);
+                }else {
+                    return;
+                }
+                URLClassLoader classLoader = (URLClassLoader) Thread.currentThread().getContextClassLoader();
                 Method method = URLClassLoader.class.getDeclaredMethod("addURL", URL.class);
                 method.setAccessible(true);
 
@@ -113,8 +132,8 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
                     }
                 }
                 logger.info("*** 加载外部第三方jar包成功! ***");
-            }catch (Exception e){
-
+            }catch (Exception ignored){
+                logger.error("*** 加载外部第三方jar包失败! ***");
             }
         }
 
@@ -129,9 +148,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
         DataSource dataSource = buildDataSource("", env);
         if (null == dataSource) return;
         logger.info("*** 启动时创建默认数据源成功! ***");
-
         printDbTable(dataSource, "default",env);
-
         defaultDataSource = dataSource;
     }
 
@@ -158,21 +175,60 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
      * spring.datasource.db.open=true
      */
     private void initCustomDbDataSources(Environment environment) {
-        if (environment.getProperty(Contains.getDbOpen(), Boolean.class) == null ? false : true) {
-            JdbcTemplate jdbcTemplate = new JdbcTemplate(this.defaultDataSource);
+        if (environment.getProperty(Contains.getDbOpen(), Boolean.class) != null) {
+            JdbcTemplate jdbcTemplate = new JdbcTemplate(defaultDataSource);
             String dbName = environment.getProperty(Contains.getDbTableName()) == null ? "db" : environment.getProperty(Contains.getDbTableName());
+            dbTableName=dbName;
             List<Map<String, Object>> entityList = queryDbEntityList(jdbcTemplate, dbName);
-            //添加分组数据
-            customDataSourcesGroup.putAll(buildGroupDataSource(entityList));
-            for (int i = 0; i < entityList.size(); i++) {
-                Map<String, Object> dbEntity = entityList.get(i);
-                HikariConfig hikariConfig = buildHikariConfig(dbEntity);
-                DataSource dataSource = new HikariDataSource(hikariConfig);
+            List<Map<String, Object>> entitySuccessList=new ArrayList<>();
+            if(Boolean.parseBoolean(environment.getProperty(Contains.getDbSync(), "false"))){
+                ExecutorService executorService = Executors.newFixedThreadPool(10);
+                CountDownLatch latch = new CountDownLatch(entityList.size());
+                for (int i = 0; i < entityList.size(); i++) {
+                    int index = i;
+                    Map<String, Object> dbEntity = entityList.get(i);
+                    executorService.submit(() -> {
+                        try {
+                            HikariConfig hikariConfig = buildHikariConfig(dbEntity);
+                            DataSource dataSource = new HikariDataSource(hikariConfig);
+                            logger.info("*** 启动时创建数据源 {} 成功! ***", dbEntity.get("pool_name"));
+                            printDbTable(dataSource,dbEntity.get("pool_name").toString(),environment);
+                            customDataSources.put(String.valueOf(dbEntity.get("pool_name")), dataSource);
 
-                logger.info("*** 启动时创建数据源 {} 成功! ***", dbEntity.get("pool_name"));
-                printDbTable(dataSource,dbEntity.get("pool_name").toString(),environment);
-                customDataSources.put(String.valueOf(dbEntity.get("pool_name")), dataSource);
+                            entitySuccessList.add(entityList.get(index));
+                        }catch (Exception e){
+                            logger.error("*** 启动时创建数据源 {} 失败! ***", dbEntity.get("pool_name"));
+                        }
+                        latch.countDown();
+                    });
+                }
+                logger.info("等待异步数据源加载任务完成...");
+                try {
+                    latch.await();
+                    //添加分组数据
+                    customDataSourcesGroup.putAll(buildGroupDataSource(entitySuccessList));
+                    logger.info("所有异步数据源加载任务完成！");
+                    executorService.shutdown();
+                }catch (Exception ignored){
+                    logger.error("所有异步数据源加载任务失败！");
+                }
+            }else {
+                for (Map<String, Object> dbEntity : entityList) {
+                    try {
+                        HikariConfig hikariConfig = buildHikariConfig(dbEntity);
+                        DataSource dataSource = new HikariDataSource(hikariConfig);
+                        logger.info("*** 启动时创建数据源 {} 成功! ***", dbEntity.get("pool_name"));
+                        printDbTable(dataSource, dbEntity.get("pool_name").toString(), environment);
+                        customDataSources.put(String.valueOf(dbEntity.get("pool_name")), dataSource);
+
+                        entitySuccessList.add(dbEntity);
+                    } catch (Exception e) {
+                        logger.error("*** 启动时创建数据源 {} 失败! ***", dbEntity.get("pool_name"));
+                    }
+                }
+                customDataSourcesGroup.putAll(buildGroupDataSource(entitySuccessList));
             }
+
         }
     }
 
@@ -215,19 +271,64 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
     public HikariConfig buildHikariConfig(Map<String, Object> dbEntity) {
         HikariConfig hikariConfig = new HikariConfig();
         hikariConfig.setDriverClassName(String.valueOf(dbEntity.get("driver_class_name")));
-        hikariConfig.setJdbcUrl(String.valueOf(dbEntity.get("jdbc_url")));
+        hikariConfig.setJdbcUrl(genJdbcUrl(String.valueOf(dbEntity.get("jdbc_url")),String.valueOf(dbEntity.get("extra_params")),String.valueOf(dbEntity.get("type")),String.valueOf(dbEntity.get("pool_name"))));
         hikariConfig.setPoolName(String.valueOf(dbEntity.get("pool_name")));
         hikariConfig.setUsername(String.valueOf(dbEntity.get("username")));
         hikariConfig.setPassword(String.valueOf(dbEntity.get("password")));
         hikariConfig.setMinimumIdle(Integer.parseInt(String.valueOf(dbEntity.get("minimum_idle"))));
         hikariConfig.setMaximumPoolSize(Integer.parseInt(String.valueOf(dbEntity.get("maximum_pool_size"))));
         hikariConfig.setConnectionTestQuery(String.valueOf(dbEntity.get("connection_test_query")));
-        hikariConfig.setRegisterMbeans(true);
+        // hikariConfig.setRegisterMbeans(true);
 
-
-        hikariConfig.setMaxLifetime(0);
-
+        hikariConfig.setConnectionTimeout(30000);
+        hikariConfig.setValidationTimeout(5000);
+        //连接泄露检测的最大时间，默认是 0，0表示的是不开启泄露检测,开启后慢sql会引发cpu飙升
+        //hikariConfig.setLeakDetectionThreshold(15000);
+        hikariConfig.setIdleTimeout(600000);
+        if("MongoDB".equals(String.valueOf(dbEntity.get("type")))){
+            hikariConfig.setMaximumPoolSize(Integer.parseInt(String.valueOf(dbEntity.get("minimum_idle"))));
+            hikariConfig.setMaxLifetime(mongoDBMaxLifetime);
+        }else {
+            hikariConfig.setMaxLifetime(1800000);
+        }
         return hikariConfig;
+    }
+
+   public String genJdbcUrl(String jdbcUrl,String extraParams,String type,String poolName){
+        String jdbc_url="";
+        if(extraParams==null|| extraParams.isEmpty() || "null".equals(extraParams)){
+            if("MongoDB".equals(type)){
+                jdbc_url=jdbcUrl+"?"+"rebuildschema=true&authSource=admin&schema="+poolName+".xml";
+            }else {
+                jdbc_url= jdbcUrl;
+            }
+        }else {
+            if("MongoDB".equals(type)) {
+                jdbc_url= jdbcUrl+"?"+extraParams+"&schema="+poolName+".xml";
+            }else {
+                jdbc_url= jdbcUrl+"?"+extraParams;
+            }
+        }
+        if(!defaultIp.isEmpty()){
+            jdbc_url=covertIpJdbcUrl(defaultHostNameMatch,jdbc_url,defaultIp);
+        }
+        return jdbc_url;
+    }
+
+    private String covertIpJdbcUrl(String hostNameMatch,String jdbcUrl,String ip){
+        String covertIpJdbcUrl=jdbcUrl;
+        String[] matches = hostNameMatch.split(",");
+        for(String start:matches){
+            String end = ":";
+            int startIndex = jdbcUrl.indexOf(start);
+            int endIndex = jdbcUrl.indexOf(end, startIndex + start.length());
+            if (startIndex != -1 && endIndex != -1) {
+                String hostName = start+jdbcUrl.substring(startIndex + start.length(), endIndex);
+                covertIpJdbcUrl=jdbcUrl.replace(hostName,ip);
+                break;
+            }
+        }
+        return covertIpJdbcUrl;
     }
 
     /**
@@ -238,7 +339,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
      * @return java.util.List<java.util.Map < java.lang.String, java.lang.Object>>
      */
     public List<Map<String, Object>> queryDbEntityList(JdbcTemplate jdbcTemplate, String dbName) {
-        List<Map<String, Object>> result = new ArrayList();
+        List<Map<String, Object>> result = new ArrayList<>();
         jdbcTemplate.query("SELECT " +
                         "driver_class_name, " +
                         "jdbc_url, " +
@@ -250,11 +351,12 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
                         "minimum_idle, " +
                         "type, " +
                         "maximum_pool_size, " +
-                        "connection_test_query " +
+                        "connection_test_query, " +
+                        "extra_params " +
                         "FROM " + dbName +" where enable=1"
                 , rs -> {
                     while (rs.next()) {
-                        Map<String, Object> item = new HashMap();
+                        Map<String, Object> item = new HashMap<>();
                         String type= rs.getString("type");
                         if(!supportDataBases.containsKey(type)){
                             logger.info("暂不支持{}!",type);
@@ -271,6 +373,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
                         item.put("minimum_idle", rs.getString("minimum_idle"));
                         item.put("maximum_pool_size", rs.getString("maximum_pool_size"));
                         item.put("connection_test_query", rs.getString("connection_test_query"));
+                        item.put("extra_params", rs.getString("extra_params"));
                         result.add(item);
                     }
                     return result;
@@ -279,17 +382,15 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
     }
 
     @Override
-    public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
+    public void registerBeanDefinitions(@NonNull AnnotationMetadata importingClassMetadata, @NonNull BeanDefinitionRegistry registry) {
         definitionRegistry=registry;
-        Map<Object, Object> targetDataSources = new HashMap();
+        Map<Object, Object> targetDataSources = new HashMap<>();
         // 将主数据源添加到更多数据源中
         targetDataSources.put("dataSource", defaultDataSource);
         DynamicDataSourceContextHolder.dataSourceIds.add("dataSource");
         // 添加更多数据源
         targetDataSources.putAll(customDataSources);
-        for (String key : customDataSources.keySet()) {
-            DynamicDataSourceContextHolder.dataSourceIds.add(key);
-        }
+        DynamicDataSourceContextHolder.dataSourceIds.addAll(customDataSources.keySet());
         //添加分组数据源
         DynamicDataSourceContextHolder.dataSourceGroupIds.putAll(customDataSourcesGroup);
 
@@ -312,7 +413,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
         for (Field field : fields) {
             try {
                 String propertyValue = environment.getProperty(Contains.getDsPoolPrefix(dsName, field.getName()));
-                if (null != propertyValue && propertyValue.trim().length() > 0) {
+                if (null != propertyValue && !propertyValue.trim().isEmpty()) {
                     PropertyDescriptor propertyDescriptor = new PropertyDescriptor(field.getName(), HikariConfig.class);
                     Method writeMethod = propertyDescriptor.getWriteMethod();
                     Class<?> type = field.getType();
@@ -327,14 +428,42 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
                     }
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.error("构建数据源失败!");
             }
         }
 
         if (StringUtils.isEmpty(hikariConfig.getJdbcUrl()))
             return null;
-        DataSource hikariDataSource = new HikariDataSource(hikariConfig);
-        return hikariDataSource;
+        getDefaultIp(hikariConfig.getJdbcUrl(),environment);
+        return new HikariDataSource(hikariConfig);
+    }
+
+    private void getDefaultIp(String jdbcUrl,Environment environment){
+        //MaxLifetime
+        String hostNameMatch=environment.getProperty(String.format("%s.%s", "spring.datasource", "hostNameMatch"), String.class);
+        Long maxLifetime=environment.getProperty(String.format("%s.%s", "spring.datasource.hikari", "mongoDBMaxLifetime"), Long.class);
+        System.err.println("mongoDBMaxLifetime:"+maxLifetime);
+        if(maxLifetime!=null){
+            mongoDBMaxLifetime=maxLifetime;
+        }
+        if(StringUtils.isEmpty(hostNameMatch)){
+            return;
+        }
+        if(jdbcUrl.contains("hzylcenter-database")){
+            return;
+        }
+        defaultHostNameMatch=hostNameMatch;
+        String start="//";
+        String end = ":";
+        int startIndex = jdbcUrl.indexOf(start);
+        int endIndex = jdbcUrl.indexOf(end, startIndex + start.length());
+        if (startIndex != -1 && endIndex != -1) {
+            String ip = jdbcUrl.substring(startIndex + start.length(), endIndex);
+            if(ip.contains(".")){
+                defaultIp=ip;
+            }
+        }
+
     }
 
     /**
@@ -343,7 +472,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
      * @param dataSource 数据源
      */
     public void printDbTable(DataSource dataSource,String poolName,Environment environment) {
-        if (!(environment.getProperty("spring.datasource.db.printTable", Boolean.class) == null ? false : true)) {
+        if (!Boolean.parseBoolean(environment.getProperty("spring.datasource.db.printTable", "false"))) {
             return;
         }
 
@@ -368,7 +497,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
                 logger.info(executeQuery.getString(1));
             }
         } catch (Exception throwAbles) {
-            throwAbles.printStackTrace();
+            logger.error("*** 打印数据源 {} 中表名失败***.\n",poolName);
         }
 
         logger.info("*** 打印数据源 {} 中表名结束***.\n",poolName);
@@ -380,6 +509,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
     private void initSupportDataBases(){
         //数据库类型及查表Sql
         supportDataBases.put("MySQL","show tables");
+        supportDataBases.put("Mongodb-BI","show tables");
         supportDataBases.put("Oracle","select TABLE_NAME from user_tables");
         supportDataBases.put("PostgreSQL","SELECT relname  FROM pg_stat_user_tables");
         supportDataBases.put("TDengine","show tables;");
@@ -403,7 +533,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
      * @return 构建分组数据
      */
     public Map<String, List<String>> buildGroupDataSource(List<Map<String, Object>> entityList) {
-        Map<String, List<String>> result = new ConcurrentHashMap();
+        Map<String, List<String>> result = new ConcurrentHashMap<>();
         for (Map.Entry<String, List<Map<String, Object>>> entryItem :
                 Optional.ofNullable(entityList).orElse(new ArrayList<Map<String, Object>>()).stream()
                         .filter(entryItem -> !StringUtils.isEmpty(String.valueOf(entryItem.get("group_name"))))
@@ -429,7 +559,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
      * @return 构建分组数据
      */
     public Map<String, List<String>> buildGroupDataSource(Environment environment) {
-        Map<String, List<String>> result = new ConcurrentHashMap();
+        Map<String, List<String>> result = new ConcurrentHashMap<>();
         String dsPrefixes = environment.getProperty(Contains.getDsNameKey());
         if (!StringUtils.isEmpty(dsPrefixes)) {
             for (String dsPrefix : dsPrefixes.split(",")) {
@@ -438,7 +568,7 @@ public class DynamicDataSourceRegister implements ImportBeanDefinitionRegistrar,
                 if (StringUtils.isEmpty(group_name) || StringUtils.isEmpty(dsPrefix))
                     continue;
 
-                List<String> groupIdList = new ArrayList();
+                List<String> groupIdList = new ArrayList<>();
                 if (result.containsKey(group_name)) {
                     groupIdList = result.get(group_name);
                 }

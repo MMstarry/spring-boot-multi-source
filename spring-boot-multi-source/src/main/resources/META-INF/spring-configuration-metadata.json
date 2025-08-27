@@ -1,0 +1,52 @@
+{
+  "properties": [
+    {
+      "name": "spring.datasource.hostNameMatch",
+      "type": "java.lang.String",
+      "description": "多数据源容器名 模糊匹配，多个逗号拼接；用以数据源连接容器名转服务器ip；注：容器端口与对外端口一致",
+      "defaultValue": ""
+    },
+    {
+      "name": "spring.datasource.db.open",
+      "type": "java.lang.Boolean",
+      "description": "是否启用多数据源连接池",
+      "defaultValue": false
+    },
+    {
+      "name": "spring.datasource.db.sync",
+      "type": "java.lang.Boolean",
+      "description": "是否异步加载多数据源",
+      "defaultValue": false
+    },
+    {
+      "name": "spring.datasource.db.printTable",
+      "type": "java.lang.Boolean",
+      "description": "是否连接数据源时打印表结构",
+      "defaultValue": false
+    },
+    {
+      "name": "spring.datasource.hikari.mongoDBMaxLifetime",
+      "type": "java.lang.Long",
+      "description": "mongodb数据源生命周期",
+      "defaultValue": 1800000
+    },
+    {
+      "name": "spring.datasource.table.name",
+      "type": "java.lang.String",
+      "description": "多数据源配置表",
+      "defaultValue": "db"
+    },
+    {
+      "name": "loadJar.open",
+      "type": "java.lang.Boolean",
+      "description": "是否动态加载外部目录下的jar包",
+      "defaultValue": false
+    },
+    {
+      "name": "loadJar.basePath",
+      "type": "java.lang.String",
+      "description": "外部jar包目录",
+      "defaultValue": ""
+    }
+  ]
+}
