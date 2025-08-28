@@ -37,6 +37,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.gpg.plugin.execution.phase>verify</maven.gpg.plugin.execution.phase>
     </properties>
 
     <dependencies>
